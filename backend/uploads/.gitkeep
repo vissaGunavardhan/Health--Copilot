@@ -1,0 +1,2 @@
+# This file ensures Git tracks the backend/uploads directory.
+# Uploaded user files will be stored here and ignored by Git.

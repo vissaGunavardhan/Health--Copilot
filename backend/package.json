@@ -1,0 +1,31 @@
+{
+  "name": "health-copilot-backend",
+  "version": "1.0.0",
+  "description": "Backend API service for Health Copilot - AI-powered personal health records assistant",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "dev:nodemon": "nodemon server.js"
+  },
+  "keywords": [
+    "health-copilot",
+    "express",
+    "health-records",
+    "hackathon",
+    "ocr",
+    "ai-summary"
+  ],
+  "author": "Health Copilot Team",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

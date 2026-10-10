@@ -134,3 +134,21 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# ---------------------------------------------------------------------------
+# Health Copilot — Application Specific Ignores
+# ---------------------------------------------------------------------------
+
+# Uploaded Patient & Medical Documents (keep .gitkeep placeholder)
+backend/uploads/*
+!backend/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# SQLite Local Database Files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+backend/db/*.db
+backend/db/*.sqlite*

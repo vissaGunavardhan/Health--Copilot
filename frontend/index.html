@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Health Copilot — AI-Powered Personal Health Records Assistant</title>
+  <meta name="description" content="AI-assisted medical record organizer and lab report interpreter for patients.">
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  
+  <!-- Custom Styling -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <nav class="navbar navbar-expand-lg bg-white border-bottom py-3">
+    <div class="container-fluid px-4">
+      <div class="navbar-brand-wrapper">
+        <div class="brand-icon">
+          <i class="bi bi-heart-pulse-fill"></i>
+        </div>
+        <div>
+          <span class="brand-title">Health Copilot</span>
+          <span class="brand-badge ms-2">Hackathon MVP</span>
+        </div>
+      </div>
+
+      <div class="d-flex align-items-center gap-3">
+        <!-- Backend Status Pill -->
+        <div class="status-pill" id="backendStatusPill" title="Click to test backend connection">
+          <span class="status-dot offline" id="backendStatusDot"></span>
+          <span id="backendStatusText">Backend: Offline</span>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" id="checkBackendBtn" type="button">
+          <i class="bi bi-arrow-repeat me-1"></i> Check API
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="container-fluid px-4 py-4">
+
+    <!-- Medical Safety Disclaimer -->
+    <div class="disclaimer-banner mb-4 d-flex align-items-center justify-content-between" role="alert">
+      <div class="d-flex align-items-center">
+        <i class="bi bi-shield-exclamation fs-5 me-2 flex-shrink-0"></i>
+        <span>
+          <strong>Important Disclaimer:</strong> Health Copilot is an educational tool to organize and simplify health records. It does not provide medical diagnoses or advice. Always consult a licensed medical professional for personal health decisions.
+        </span>
+      </div>
+    </div>
+
+    <!-- Quick Stats Cards Row -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="metric-card">
+          <div class="metric-title">Stored Reports</div>
+          <div class="metric-value" id="statReportCount">0</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="metric-card">
+          <div class="metric-title">Identified Metrics</div>
+          <div class="metric-value" id="statMetricCount">0</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="metric-card">
+          <div class="metric-title">Extraction Service</div>
+          <div class="metric-value fs-6 mt-3 text-secondary" id="statOcrEngine">Ready for Sprint 3</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="metric-card">
+          <div class="metric-title">AI Summarizer</div>
+          <div class="metric-value fs-6 mt-3 text-secondary" id="statAiStatus">Ready for Sprint 4</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Workspace: Upload Form & Summary Area -->
+    <div class="row g-4">
+      
+      <!-- Left Column: Upload Section -->
+      <div class="col-lg-5">
+        <div class="dashboard-card h-100">
+          <div class="dashboard-card-header">
+            <h5 class="mb-0 fw-semibold text-dark">
+              <i class="bi bi-file-earmark-medical me-2 text-teal"></i> Upload Health Report
+            </h5>
+            <span class="badge bg-light text-muted border">Sprint 1</span>
+          </div>
+          <div class="dashboard-card-body">
+            
+            <form id="reportUploadForm" onsubmit="return false;">
+              
+              <!-- File Drag & Drop Zone -->
+              <div class="dropzone" id="dropzoneContainer">
+                <i class="bi bi-cloud-arrow-up dropzone-icon"></i>
+                <h6 class="fw-semibold mb-1">Drag and drop your report here</h6>
+                <p class="text-muted small mb-2">Supports PDF documents and lab images (PNG, JPG)</p>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="browseFileBtn">
+                  Browse Files
+                </button>
+                <input type="file" id="reportFileInput" class="d-none" accept=".pdf,image/png,image/jpeg,image/jpg">
+              </div>
+
+              <!-- Selected File Preview Container -->
+              <div class="selected-file-box" id="selectedFileBox">
+                <div class="selected-file-info">
+                  <div class="d-flex align-items-center">
+                    <i class="bi bi-file-earmark-text fs-4 text-primary me-2"></i>
+                    <div>
+                      <div class="fw-semibold text-truncate" style="max-width: 220px;" id="selectedFileName">filename.pdf</div>
+                      <div class="text-muted small" id="selectedFileSize">0 KB</div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-link text-danger p-0" id="clearFileBtn" title="Remove file">
+                    <i class="bi bi-x-circle fs-5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Report Metadata Category -->
+              <div class="mt-3">
+                <label for="reportCategorySelect" class="form-label fw-semibold small text-muted">Report Category</label>
+                <select class="form-select" id="reportCategorySelect">
+                  <option value="Blood Test" selected>Complete Blood Count (CBC) / Blood Work</option>
+                  <option value="Lipid Panel">Lipid Panel (Cholesterol)</option>
+                  <option value="Metabolic Panel">Comprehensive Metabolic Panel (CMP)</option>
+                  <option value="Prescription">Doctor Prescription / Medication Slip</option>
+                  <option value="Radiology">Radiology / Imaging Report</option>
+                  <option value="Other">Other Medical Document</option>
+                </select>
+              </div>
+
+              <!-- Optional Notes -->
+              <div class="mt-3">
+                <label for="reportNotesInput" class="form-label fw-semibold small text-muted">Notes / Questions (Optional)</label>
+                <textarea class="form-control" id="reportNotesInput" rows="2" placeholder="e.g., Routine annual health checkup..."></textarea>
+              </div>
+
+              <!-- Action Button -->
+              <div class="mt-4">
+                <button type="button" class="btn btn-medical w-100" id="analyzeReportBtn">
+                  <i class="bi bi-cpu me-1"></i> Analyze Report
+                </button>
+              </div>
+
+              <!-- Status Feedback Alert -->
+              <div class="mt-3 d-none" id="uploadStatusAlert" role="alert">
+                <!-- Dynamically populated by script.js -->
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Summary & Insights Area -->
+      <div class="col-lg-7">
+        <div class="dashboard-card h-100">
+          <div class="dashboard-card-header">
+            <h5 class="mb-0 fw-semibold text-dark">
+              <i class="bi bi-clipboard2-pulse me-2 text-teal"></i> AI Health Summary & Insights
+            </h5>
+            <span class="badge bg-secondary-subtle text-secondary" id="summaryStatusBadge">Awaiting Upload</span>
+          </div>
+          <div class="dashboard-card-body">
+            
+            <!-- Empty State Display -->
+            <div class="empty-state" id="summaryEmptyState">
+              <div class="empty-state-icon">
+                <i class="bi bi-file-earmark-medical"></i>
+              </div>
+              <h5 class="fw-semibold text-dark">No Report Analyzed Yet</h5>
+              <p class="text-muted small mx-auto" style="max-width: 420px;">
+                Select a medical document on the left and verify your backend service is running to see AI-generated summaries, extracted lab metrics, and doctor discussion points.
+              </p>
+              <div class="alert alert-light border small text-muted d-inline-block text-start">
+                <i class="bi bi-info-circle me-1 text-primary"></i> <strong>Next Hackathon Steps:</strong>
+                <ul class="mb-0 ps-3 mt-1">
+                  <li>Start backend server: <code>npm run dev</code></li>
+                  <li>Wire file upload to <code>POST /api/reports/upload</code></li>
+                  <li>Extract text in <code>services/extraction.js</code></li>
+                  <li>Generate summary in <code>services/ai.js</code></li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Analysis Content Area (Populated when integrated) -->
+            <div class="d-none" id="summaryContentArea">
+              
+              <!-- Overview Card -->
+              <div class="card border mb-3">
+                <div class="card-body">
+                  <h6 class="card-subtitle mb-2 text-muted fw-bold">Overview</h6>
+                  <p class="card-text" id="summaryOverviewText">No summary loaded.</p>
+                </div>
+              </div>
+
+              <!-- Metrics Table -->
+              <div class="table-responsive mb-3">
+                <table class="table table-hover align-middle border">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Test Name</th>
+                      <th>Observed Value</th>
+                      <th>Reference Range</th>
+                      <th>Indicator</th>
+                    </tr>
+                  </thead>
+                  <tbody id="metricsTableBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Doctor Questions Callout -->
+              <div class="questions-box" id="doctorQuestionsBox">
+                <h6 class="fw-bold mb-2 text-primary">
+                  <i class="bi bi-chat-square-dots me-1"></i> Questions for Your Doctor
+                </h6>
+                <ul class="mb-0 ps-3" id="doctorQuestionsList">
+                  <!-- Populated dynamically -->
+                </ul>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-3 mt-5">
+    <div class="container-fluid px-4 d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
+      <div>
+        <span>Health Copilot — 24-Hour Hackathon Project Prototype</span>
+      </div>
+      <div>
+        <a href="../docs/architecture.md" class="text-decoration-none text-muted me-3">Architecture</a>
+        <a href="../docs/api-contract.md" class="text-decoration-none text-muted">API Docs</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Bootstrap 5 Bundle JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Main Script -->
+  <script src="script.js"></script>
+</body>
+</html>
