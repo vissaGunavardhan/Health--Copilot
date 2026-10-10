@@ -171,15 +171,25 @@ function getAllReports(options = {}) {
   return new Promise((resolve, reject) => {
     const limit = parseInt(options.limit, 10) || 50;
     const category = options.category;
+    const sort = options.sort || 'name_asc';
+    const letter = options.letter || '';
 
     if (!useJsonFallback && db) {
-      let sql = 'SELECT * FROM reports';
+      let sql = 'SELECT * FROM reports WHERE 1=1';
       const params = [];
       if (category && category !== 'All') {
-        sql += ' WHERE category = ?';
+        sql += ' AND category = ?';
         params.push(category);
       }
-      sql += ' ORDER BY id DESC LIMIT ?';
+      if (letter) {
+        sql += ' AND original_name LIKE ?';
+        params.push(`${letter}%`);
+      }
+      const orderBy = (sort === 'name_desc')
+        ? 'ORDER BY original_name COLLATE NOCASE DESC'
+        : (sort === 'id_desc' ? 'ORDER BY id DESC' : 'ORDER BY original_name COLLATE NOCASE ASC');
+
+      sql += ` ${orderBy} LIMIT ?`;
       params.push(limit);
 
       db.all(sql, params, (err, rows) => {
@@ -192,7 +202,10 @@ function getAllReports(options = {}) {
       if (category && category !== 'All') {
         reports = reports.filter((r) => r.category === category);
       }
-      reports.sort((a, b) => b.id - a.id);
+      if (letter) {
+        reports = reports.filter((r) => (r.original_name || '').toUpperCase().startsWith(letter.toUpperCase()));
+      }
+      reports.sort((a, b) => (a.original_name || '').localeCompare(b.original_name || ''));
       resolve(reports.slice(0, limit).map(formatReportRow));
     }
   });

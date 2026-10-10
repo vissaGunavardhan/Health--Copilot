@@ -26,11 +26,23 @@ let speechRecognition = null;
 let currentUtterance = null;
 let identifiedMedicineData = null;
 
-// Cohort pagination state
+// Cohort pagination state & A-Z Sequence Ordering
 let cohortCurrentPage = 1;
 let cohortTotalPages = 1;
 let cohortSearchQuery = '';
 let cohortCategoryFilter = 'All';
+let cohortSort = 'name_asc'; // Default: A to Z Alphabetical
+let cohortLetterFilter = '';
+
+// Highway GPS & Emergency Contacts State
+let userGpsCoordinates = null;
+let emergencyContacts = {
+  parents: localStorage.getItem('hc_parents_phone') || '+919876543210',
+  warden: localStorage.getItem('hc_warden_phone') || '+919123456789'
+};
+
+// Daily Nutrition State
+let dailyNutritionData = { calories: 0, protein: 0, hydrationMl: 0, logs: [] };
 
 // Audio Chime Synthesizer using Web Audio API
 const audioCtx = (window.AudioContext || window.webkitAudioContext) ? new (window.AudioContext || window.webkitAudioContext)() : null;
@@ -44,6 +56,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupMedicationEvents();
   setupMedicineIdentifierEvents();
   setupVoiceCopilotEvents();
+  setupBmiAndNutritionEvents();
+  setupDoctorChecklistEvents();
+  setupHighwayEmergencyEvents();
   setupBackendHealthCheck();
 
   // Load initial data
@@ -52,6 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchMedicationsList();
     fetchCohortAnalytics();
     fetchCohortRecords(1);
+    fetchDailyNutrition();
+    fetchEmergencyContacts();
   });
 });
 
@@ -574,6 +591,8 @@ function setupCohortAnalyticsEvents() {
   const refreshBtn = document.getElementById('refreshCohortAnalyticsBtn');
   const searchInput = document.getElementById('cohortSearchInput');
   const categorySelect = document.getElementById('cohortCategorySelect');
+  const sortSelect = document.getElementById('cohortSortSelect');
+  const alphabetBar = document.getElementById('cohortAlphabetBar');
   const prevBtn = document.getElementById('cohortPrevPageBtn');
   const nextBtn = document.getElementById('cohortNextPageBtn');
 
@@ -599,6 +618,26 @@ function setupCohortAnalyticsEvents() {
   if (categorySelect) {
     categorySelect.addEventListener('change', (e) => {
       cohortCategoryFilter = e.target.value;
+      cohortCurrentPage = 1;
+      fetchCohortRecords(1);
+    });
+  }
+
+  if (sortSelect) {
+    sortSelect.addEventListener('change', (e) => {
+      cohortSort = e.target.value;
+      cohortCurrentPage = 1;
+      fetchCohortRecords(1);
+    });
+  }
+
+  if (alphabetBar) {
+    alphabetBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('.alphabet-btn');
+      if (!btn) return;
+      alphabetBar.querySelectorAll('.alphabet-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      cohortLetterFilter = btn.dataset.letter || '';
       cohortCurrentPage = 1;
       fetchCohortRecords(1);
     });
@@ -645,7 +684,7 @@ async function fetchCohortRecords(page = 1) {
   const tableBody = document.getElementById('cohortTableBody');
   if (!tableBody) return;
 
-  const url = `${API_BASE_URL}/reports?page=${page}&limit=12&category=${encodeURIComponent(cohortCategoryFilter)}&search=${encodeURIComponent(cohortSearchQuery)}`;
+  const url = `${API_BASE_URL}/reports?page=${page}&limit=12&category=${encodeURIComponent(cohortCategoryFilter)}&search=${encodeURIComponent(cohortSearchQuery)}&sort=${encodeURIComponent(cohortSort)}&letter=${encodeURIComponent(cohortLetterFilter)}`;
   
   try {
     const res = await fetch(url);
@@ -1128,7 +1167,23 @@ function handleVoiceTranscript(spokenText) {
   const lower = spokenText.toLowerCase();
   let responseText = '';
 
-  if (lower.includes('next medicine') || (lower.includes('when') && lower.includes('medicine'))) {
+  if (lower.includes('parent') || lower.includes('mom') || lower.includes('dad') || lower.includes('call my parent')) {
+    responseText = `Emergency call initiated! Dialing your parents at ${emergencyContacts.parents}. Stay calm, emergency alert card is displayed on your screen.`;
+    window.openEmergencyModal('Emergency Call: Parents');
+    setTimeout(() => {
+      window.location.href = `tel:${emergencyContacts.parents}`;
+    }, 1800);
+  } else if (lower.includes('warden') || lower.includes('hostel') || lower.includes('call my hostel warden')) {
+    responseText = `Emergency call initiated! Dialing your hostel warden at ${emergencyContacts.warden}. Alerting residential campus supervisor.`;
+    window.openEmergencyModal('Emergency Call: Hostel Warden');
+    setTimeout(() => {
+      window.location.href = `tel:${emergencyContacts.warden}`;
+    }, 1800);
+  } else if (lower.includes('accident') || lower.includes('highway') || lower.includes('crash') || lower.includes('police') || lower.includes('ambulance') || lower.includes('help me') || lower.includes('sick')) {
+    responseText = `Highway emergency SOS activated! Health Copilot is detecting your live GPS coordinates for nearest hospitals, police stations, and 1033 NHAI highway helpline.`;
+    window.openEmergencyModal('Highway Accident SOS');
+    window.detectLiveGpsLocation();
+  } else if (lower.includes('next medicine') || (lower.includes('when') && lower.includes('medicine'))) {
     const pending = cachedMedications.filter(m => !m.takenToday);
     if (pending.length > 0) {
       const next = pending[0];
@@ -1249,3 +1304,543 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+// =========================================================================
+// 9. TAB 6: AGE-WISE BMI & DAILY NUTRITION TRACKER
+// =========================================================================
+function setupBmiAndNutritionEvents() {
+  const computeBtn = document.getElementById('computeBmiBtn');
+  const refreshBtn = document.getElementById('refreshNutritionBtn');
+  const customForm = document.getElementById('customMealLogForm');
+
+  if (computeBtn) {
+    computeBtn.addEventListener('click', calculateBmiAndMetabolism);
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', fetchDailyNutrition);
+  }
+
+  if (customForm) {
+    customForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const foodName = document.getElementById('customFoodName').value.trim();
+      const mealType = document.getElementById('customMealType').value;
+      const calories = parseFloat(document.getElementById('customCalories').value) || 0;
+      const protein = parseFloat(document.getElementById('customProtein').value) || 0;
+      const water = parseFloat(document.getElementById('customWater').value) || 0;
+
+      if (!foodName) return;
+      await quickLogFood(foodName, calories, protein, water, mealType);
+      customForm.reset();
+    });
+  }
+
+  // Initial calculation
+  calculateBmiAndMetabolism();
+}
+
+function calculateBmiAndMetabolism() {
+  const age = parseInt(document.getElementById('calcAge')?.value) || 21;
+  const gender = document.getElementById('calcGender')?.value || 'male';
+  const height = parseFloat(document.getElementById('calcHeight')?.value) || 172;
+  const weight = parseFloat(document.getElementById('calcWeight')?.value) || 68;
+  const activity = parseFloat(document.getElementById('calcActivity')?.value) || 1.375;
+
+  const heightM = height / 100;
+  const bmi = weight / (heightM * heightM);
+  const bmiRounded = bmi.toFixed(1);
+
+  const valueDisplay = document.getElementById('bmiValueDisplay');
+  const badge = document.getElementById('bmiCategoryBadge');
+  const pointer = document.getElementById('bmiPointer');
+
+  if (valueDisplay) valueDisplay.textContent = bmiRounded;
+
+  let category = 'Normal';
+  let badgeClass = 'bg-success';
+  let pointerLeft = 45; // percentage on track
+
+  if (bmi < 18.5) {
+    category = 'Underweight';
+    badgeClass = 'bg-warning text-dark';
+    pointerLeft = Math.max(5, (bmi / 18.5) * 20);
+  } else if (bmi <= 24.9) {
+    category = 'Normal Weight';
+    badgeClass = 'bg-success';
+    pointerLeft = 20 + ((bmi - 18.5) / 6.4) * 35;
+  } else if (bmi <= 29.9) {
+    category = 'Overweight';
+    badgeClass = 'bg-warning text-dark';
+    pointerLeft = 55 + ((bmi - 25.0) / 4.9) * 25;
+  } else {
+    category = 'Obese';
+    badgeClass = 'bg-danger';
+    pointerLeft = Math.min(95, 80 + ((bmi - 30) / 10) * 15);
+  }
+
+  if (badge) {
+    badge.textContent = `${category} (${bmiRounded})`;
+    badge.className = `badge ${badgeClass} fs-6`;
+  }
+  if (pointer) {
+    pointer.style.left = `${pointerLeft}%`;
+  }
+
+  // Basal Metabolic Rate (BMR) - Mifflin-St Jeor
+  let bmr = (10 * weight) + (6.25 * height) - (5 * age);
+  bmr = (gender === 'male') ? bmr + 5 : bmr - 161;
+
+  const targetCalories = Math.round(bmr * activity);
+  const targetProteinMin = Math.round(weight * 1.0);
+  const targetProteinMax = Math.round(weight * 1.3);
+  const targetWater = Math.max(2200, Math.round(weight * 35));
+
+  const calEl = document.getElementById('bmiTargetCalories');
+  const proEl = document.getElementById('bmiTargetProtein');
+  const waterEl = document.getElementById('bmiTargetWater');
+
+  if (calEl) calEl.textContent = `${targetCalories.toLocaleString()} kcal`;
+  if (proEl) proEl.textContent = `${targetProteinMin} - ${targetProteinMax} g`;
+  if (waterEl) waterEl.textContent = `${targetWater.toLocaleString()} ml`;
+
+  // Age-wise personalized guidance
+  const adviceEl = document.getElementById('ageWiseAdviceText');
+  if (adviceEl) {
+    if (age < 18) {
+      adviceEl.textContent = `Adolescent Age (${age}): Prioritize whole foods, dietary calcium and protein for active physical development. Avoid skipping breakfast.`;
+    } else if (age <= 25) {
+      adviceEl.textContent = `Young Adult / Student Age (${age}): Ensure ${targetProteinMin}g+ protein for muscle stamina and energy. Keep hydration steady, especially during long college/study hours.`;
+    } else if (age <= 45) {
+      adviceEl.textContent = `Working Adult Age (${age}): Focus on cardiovascular conditioning, keep glycemic index of meals moderate, and monitor blood pressure annually.`;
+    } else if (age <= 60) {
+      adviceEl.textContent = `Mature Adult Age (${age}): Screen lipids and renal functions regularly. Maintain strength training to preserve lean muscle and bone mineral density.`;
+    } else {
+      adviceEl.textContent = `Senior Wellness Age (${age}): Prioritize calcium and Vitamin D3 intake, stay hydrated with small frequent sips, and engage in daily gentle walks.`;
+    }
+  }
+}
+
+async function fetchDailyNutrition() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/nutrition/today`);
+    if (!res.ok) return;
+    const result = await res.json();
+    if (!result.success) return;
+
+    dailyNutritionData = result;
+    const totals = result.totals || { calories: 0, protein: 0, hydrationMl: 0 };
+
+    // Targets (default 2,000 kcal, 65g pro, 2,500ml water)
+    const calTarget = 2000;
+    const proTarget = 65;
+    const waterTarget = 2500;
+
+    const calPct = Math.min(100, Math.round((totals.calories / calTarget) * 100));
+    const proPct = Math.min(100, Math.round((totals.protein / proTarget) * 100));
+    const waterPct = Math.min(100, Math.round((totals.hydrationMl / waterTarget) * 100));
+
+    // Update Calories
+    const calDisp = document.getElementById('todayCaloriesDisplay');
+    const calBar = document.getElementById('caloriesProgressBar');
+    const calRem = document.getElementById('caloriesRemainingLabel');
+    if (calDisp) calDisp.innerHTML = `${Math.round(totals.calories)} <span class="fs-6 text-muted">/ ${calTarget}</span>`;
+    if (calBar) calBar.style.width = `${calPct}%`;
+    if (calRem) calRem.textContent = `${Math.max(0, calTarget - Math.round(totals.calories))} kcal remaining`;
+
+    // Update Protein
+    const proDisp = document.getElementById('todayProteinDisplay');
+    const proBar = document.getElementById('proteinProgressBar');
+    const proRem = document.getElementById('proteinRemainingLabel');
+    if (proDisp) proDisp.innerHTML = `${Math.round(totals.protein)} <span class="fs-6 text-muted">/ ${proTarget} g</span>`;
+    if (proBar) proBar.style.width = `${proPct}%`;
+    if (proRem) proRem.textContent = `${Math.max(0, proTarget - Math.round(totals.protein))}g remaining`;
+
+    // Update Hydration
+    const hydDisp = document.getElementById('todayHydrationDisplay');
+    const hydBar = document.getElementById('hydrationProgressBar');
+    const hydGlass = document.getElementById('waterGlassesLabel');
+    if (hydDisp) hydDisp.innerHTML = `${Math.round(totals.hydrationMl)} <span class="fs-6 text-muted">/ ${waterTarget} ml</span>`;
+    if (hydBar) hydBar.style.width = `${waterPct}%`;
+    if (hydGlass) hydGlass.textContent = `${(totals.hydrationMl / 250).toFixed(1)} / 10 glasses`;
+
+    // Render Table
+    const tbody = document.getElementById('nutritionTableBody');
+    if (tbody) {
+      if (!result.logs || result.logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No foods logged today yet. Use 1-Click Quick Add above!</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      result.logs.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="badge bg-light text-dark border">${escapeHtml(item.mealType)}</span></td>
+          <td class="fw-semibold text-dark">${escapeHtml(item.foodName)}</td>
+          <td class="text-danger fw-bold">${item.calories || 0} cal</td>
+          <td class="text-primary fw-bold">${item.protein || 0} g</td>
+          <td class="text-teal fw-bold">${item.hydrationMl || 0} ml</td>
+          <td>
+            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteNutritionItem(${item.id})">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) {
+    console.warn('Failed to fetch daily nutrition:', e);
+  }
+}
+
+window.quickLogFood = async function(foodName, calories, protein, hydrationMl, mealType = 'Snack') {
+  try {
+    const res = await fetch(`${API_BASE_URL}/nutrition/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ foodName, calories, protein, hydrationMl, mealType })
+    });
+    if (res.ok) {
+      await fetchDailyNutrition();
+    }
+  } catch (e) {
+    console.error('Error logging food:', e);
+  }
+};
+
+window.deleteNutritionItem = async function(id) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/nutrition/log/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      await fetchDailyNutrition();
+    }
+  } catch (e) {
+    console.error('Error deleting meal item:', e);
+  }
+};
+
+// =========================================================================
+// 10. TAB 7: DOCTOR CONSULTANT CHECK-UP LIST
+// =========================================================================
+function setupDoctorChecklistEvents() {
+  const syncMedsBtn = document.getElementById('syncMedsToChecklistBtn');
+  const syncReportBtn = document.getElementById('syncReportToChecklistBtn');
+  const copyBtn = document.getElementById('copyChecklistBtn');
+  const shareWhatsappBtn = document.getElementById('shareChecklistWhatsappBtn');
+
+  if (syncMedsBtn) {
+    syncMedsBtn.addEventListener('click', syncMedsToChecklist);
+  }
+
+  if (syncReportBtn) {
+    syncReportBtn.addEventListener('click', syncReportToChecklist);
+  }
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      const summaryText = buildDoctorChecklistSummaryText();
+      navigator.clipboard.writeText(summaryText);
+      alert('Doctor Consultation Checklist copied to clipboard!');
+    });
+  }
+
+  if (shareWhatsappBtn) {
+    shareWhatsappBtn.addEventListener('click', () => {
+      const summaryText = buildDoctorChecklistSummaryText();
+      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(summaryText)}`;
+      window.open(url, '_blank');
+    });
+  }
+}
+
+function syncMedsToChecklist() {
+  const list = document.getElementById('checklistMedsList');
+  if (!list) return;
+
+  if (cachedMedications.length === 0) {
+    list.innerHTML = '<li class="text-muted small">No medications found in live schedule.</li>';
+    return;
+  }
+
+  list.innerHTML = '';
+  cachedMedications.forEach(m => {
+    const li = document.createElement('li');
+    li.className = 'mb-1';
+    li.innerHTML = `<i class="bi bi-dot text-teal fs-5"></i> <strong>${escapeHtml(m.name)} ${escapeHtml(m.dosage)}</strong> — ${escapeHtml(m.mealTiming)} at ${escapeHtml(m.timeOfDay)}`;
+    list.appendChild(li);
+  });
+}
+
+function syncReportToChecklist() {
+  const list = document.getElementById('checklistAbnormalList');
+  if (!list) return;
+
+  if (!currentReportData || !currentReportData.aiSummary || !currentReportData.aiSummary.metrics) {
+    list.innerHTML = '<li class="text-muted small">Load or upload a lab report to sync abnormal findings.</li>';
+    return;
+  }
+
+  const metrics = currentReportData.aiSummary.metrics;
+  const abnormal = metrics.filter(m => m.flag && m.flag.toLowerCase() !== 'normal');
+
+  if (abnormal.length === 0) {
+    list.innerHTML = '<li class="text-success small"><i class="bi bi-check-circle-fill me-1"></i> All screened biomarkers are in normal reference range.</li>';
+    return;
+  }
+
+  list.innerHTML = '';
+  abnormal.forEach(m => {
+    const li = document.createElement('li');
+    li.className = 'mb-1 text-danger';
+    li.innerHTML = `<i class="bi bi-arrow-up-circle-fill me-1"></i> <strong>${escapeHtml(m.name)}: ${escapeHtml(m.value)} ${escapeHtml(m.unit || '')}</strong> [${escapeHtml(m.flag)}] — Ref: ${escapeHtml(m.referenceRange || 'Standard')}`;
+    list.appendChild(li);
+  });
+}
+
+function buildDoctorChecklistSummaryText() {
+  const bp = document.getElementById('checkupBp')?.value || '130/85';
+  const pulse = document.getElementById('checkupPulse')?.value || '76 bpm';
+  const sugar = document.getElementById('checkupGlucose')?.value || '142 mg/dL';
+  const spo2 = document.getElementById('checkupSpo2')?.value || '98% SpO2';
+
+  let text = `🏥 *DOCTOR CONSULTATION SUMMARY - HEALTH COPILOT*\nRepresented by The Brocode\n\n`;
+  text += `📊 *PATIENT VITALS:*\n- Blood Pressure: ${bp}\n- Heart Rate: ${pulse}\n- Blood Sugar: ${sugar}\n- SpO2: ${spo2}\n\n`;
+
+  text += `💊 *ACTIVE MEDICATIONS:*\n`;
+  if (cachedMedications.length > 0) {
+    cachedMedications.forEach(m => {
+      text += `- ${m.name} (${m.dosage}) - ${m.mealTiming} at ${m.timeOfDay}\n`;
+    });
+  } else {
+    text += `- Metformin 500mg, Atorvastatin 10mg, Vitamin D3\n`;
+  }
+
+  text += `\n⚠️ *SYMPTOMS & COMPLAINTS:*\n`;
+  if (document.getElementById('sym1')?.checked) text += `- Elevated Blood Sugar / Thirst\n`;
+  if (document.getElementById('sym2')?.checked) text += `- Unexplained Fatigue & Afternoon Tiredness\n`;
+  if (document.getElementById('sym3')?.checked) text += `- Dizziness / Lightheadedness\n`;
+  if (document.getElementById('sym4')?.checked) text += `- Chest Tightness / Shortness of Breath\n`;
+  if (document.getElementById('sym5')?.checked) text += `- Frequent Nighttime Urination\n`;
+  if (document.getElementById('sym6')?.checked) text += `- Stomach Acidity / Heartburn\n`;
+
+  const extra = document.getElementById('additionalSymptomsNotes')?.value;
+  if (extra) text += `- Notes: ${extra}\n`;
+
+  text += `\n❓ *QUESTIONS FOR DOCTOR:*\n`;
+  text += `- Is my current medication dosage effective?\n- Are additional renal or cardiac screenings required?\n- Dietary modifications for current BMI?\n`;
+
+  return text;
+}
+
+// =========================================================================
+// 11. TAB 8: HIGHWAY ACCIDENT & EMERGENCY SOS (NEARBY POLICE, HOSPITALS, GPS)
+// =========================================================================
+function setupHighwayEmergencyEvents() {
+  const contactsForm = document.getElementById('emergencyContactsForm');
+  if (contactsForm) {
+    contactsForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const parentsPhone = document.getElementById('inputParentsPhone').value.trim();
+      const wardenPhone = document.getElementById('inputWardenPhone').value.trim();
+
+      if (parentsPhone) {
+        emergencyContacts.parents = parentsPhone;
+        localStorage.setItem('hc_parents_phone', parentsPhone);
+        updateEmergencyContactDisplay();
+      }
+      if (wardenPhone) {
+        emergencyContacts.warden = wardenPhone;
+        localStorage.setItem('hc_warden_phone', wardenPhone);
+        updateEmergencyContactDisplay();
+      }
+      alert('Emergency phone numbers updated successfully!');
+    });
+  }
+
+  updateEmergencyContactDisplay();
+}
+
+function updateEmergencyContactDisplay() {
+  const parentsLabel = document.getElementById('parentsPhoneLabel');
+  const wardenLabel = document.getElementById('wardenPhoneLabel');
+  const callParentsBtn = document.getElementById('callParentsActionBtn');
+  const callWardenBtn = document.getElementById('callWardenActionBtn');
+  const modalParentsBtn = document.getElementById('modalDialParentsBtn');
+  const modalWardenBtn = document.getElementById('modalDialWardenBtn');
+
+  if (parentsLabel) parentsLabel.textContent = emergencyContacts.parents;
+  if (wardenLabel) wardenLabel.textContent = emergencyContacts.warden;
+
+  if (callParentsBtn) callParentsBtn.href = `tel:${emergencyContacts.parents}`;
+  if (callWardenBtn) callWardenBtn.href = `tel:${emergencyContacts.warden}`;
+
+  if (modalParentsBtn) {
+    modalParentsBtn.href = `tel:${emergencyContacts.parents}`;
+    modalParentsBtn.innerHTML = `<i class="bi bi-telephone-fill me-2"></i> Dial My Parents (${emergencyContacts.parents})`;
+  }
+  if (modalWardenBtn) {
+    modalWardenBtn.href = `tel:${emergencyContacts.warden}`;
+    modalWardenBtn.innerHTML = `<i class="bi bi-building-fill-exclamation me-2"></i> Dial Hostel Warden (${emergencyContacts.warden})`;
+  }
+}
+
+async function fetchEmergencyContacts() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/emergency/contacts`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.contacts) {
+        data.contacts.forEach(c => {
+          if (c.role === 'Parents') emergencyContacts.parents = c.phone;
+          if (c.role === 'Hostel Warden') emergencyContacts.warden = c.phone;
+        });
+        updateEmergencyContactDisplay();
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load remote emergency contacts:', e);
+  }
+}
+
+window.detectLiveGpsLocation = function() {
+  const badge = document.getElementById('gpsStatusBadge');
+  const display = document.getElementById('gpsCoordinatesDisplay');
+  const addressText = document.getElementById('gpsAddressText');
+  const mapLink = document.getElementById('viewGpsMapLink');
+  const hospBtn = document.getElementById('findHospitalsBtn');
+  const polBtn = document.getElementById('findPoliceBtn');
+  const modalGps = document.getElementById('sosModalGpsText');
+
+  if (badge) {
+    badge.className = 'badge bg-warning text-dark';
+    badge.textContent = 'Acquiring GPS Satellite Lock...';
+  }
+
+  if (!navigator.geolocation) {
+    if (display) display.textContent = 'Geolocation not supported by browser.';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const lat = position.coords.latitude.toFixed(5);
+      const lon = position.coords.longitude.toFixed(5);
+      const acc = Math.round(position.coords.accuracy);
+      userGpsCoordinates = { lat, lon, acc };
+
+      if (badge) {
+        badge.className = 'badge bg-success';
+        badge.textContent = 'GPS Lock Active';
+      }
+      if (display) display.textContent = `${lat}° N, ${lon}° E (±${acc}m)`;
+      if (addressText) addressText.innerHTML = `<strong>Live Highway GPS Position:</strong> Coordinates <code>${lat}, ${lon}</code>. Nearest services synchronized.`;
+
+      const gmapUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+      if (mapLink) mapLink.href = gmapUrl;
+
+      // Update nearby radar
+      if (hospBtn) hospBtn.href = `https://www.google.com/maps/search/emergency+hospitals+trauma+near+me/@${lat},${lon},14z`;
+      if (polBtn) polBtn.href = `https://www.google.com/maps/search/police+station+near+me/@${lat},${lon},14z`;
+
+      if (modalGps) {
+        modalGps.innerHTML = `<strong>Coordinates:</strong> ${lat}° N, ${lon}° E &bull; <a href="${gmapUrl}" target="_blank" class="fw-bold text-danger">Open Pin on Google Maps</a>`;
+      }
+    },
+    (err) => {
+      console.warn('Geolocation fallback:', err);
+      // Fallback demo coordinates
+      const lat = '17.38504';
+      const lon = '78.48667';
+      userGpsCoordinates = { lat, lon, acc: 25 };
+
+      if (badge) {
+        badge.className = 'badge bg-secondary';
+        badge.textContent = 'Demo GPS Mode';
+      }
+      if (display) display.textContent = `${lat}° N, ${lon}° E (Simulated Highway Pin)`;
+      if (addressText) addressText.innerHTML = `<strong>Current Highway Location:</strong> Simulated Live Point: <code>${lat}, ${lon}</code>. (Allow browser GPS permission for high-accuracy satellite lock).`;
+
+      const gmapUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+      if (mapLink) mapLink.href = gmapUrl;
+      if (hospBtn) hospBtn.href = `https://www.google.com/maps/search/emergency+hospitals+trauma+near+me/@${lat},${lon},14z`;
+      if (polBtn) polBtn.href = `https://www.google.com/maps/search/police+station+near+me/@${lat},${lon},14z`;
+
+      if (modalGps) {
+        modalGps.innerHTML = `<strong>Coordinates:</strong> ${lat}° N, ${lon}° E &bull; <a href="${gmapUrl}" target="_blank" class="fw-bold text-danger">Open Pin on Google Maps</a>`;
+      }
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+  );
+};
+
+window.openEmergencyModal = function(title = 'Emergency SOS Alert') {
+  const modalTitle = document.getElementById('sosModalTitle');
+  if (modalTitle) modalTitle.textContent = title;
+
+  detectLiveGpsLocation();
+  playEmergencySiren();
+
+  const modalEl = document.getElementById('emergencySosModal');
+  if (modalEl && window.bootstrap) {
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  }
+};
+
+window.triggerAccidentSos = async function() {
+  window.openEmergencyModal('Highway Accident SOS Alert');
+  speakText("Highway accident emergency alert activated. Alerting emergency contacts, ambulance and police services.");
+
+  const lat = userGpsCoordinates ? userGpsCoordinates.lat : '17.38504';
+  const lon = userGpsCoordinates ? userGpsCoordinates.lon : '78.48667';
+
+  try {
+    await fetch(`${API_BASE_URL}/emergency/sos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventType: 'Highway Accident / Emergency',
+        latitude: lat,
+        longitude: lon,
+        message: 'Highway accident emergency reported via Health Copilot'
+      })
+    });
+  } catch (e) {
+    console.warn('Emergency register exception:', e);
+  }
+};
+
+window.shareGpsViaWhatsapp = function() {
+  const lat = userGpsCoordinates ? userGpsCoordinates.lat : '17.38504';
+  const lon = userGpsCoordinates ? userGpsCoordinates.lon : '78.48667';
+  const mapLink = `https://maps.google.com/?q=${lat},${lon}`;
+
+  const message = `🚨 *CRITICAL HEALTH & HIGHWAY EMERGENCY ALERT*\nRepresented by The Brocode\n\nI need urgent medical/emergency assistance! I am currently unable to call easily.\n\n📍 *My Live GPS Location:*\n${mapLink}\n\nPlease dispatch help or call me immediately!\nEmergency Helplines: Universal 112 | Ambulance 108 | Highway Help 1033`;
+
+  const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+  window.open(url, '_blank');
+};
+
+function playEmergencySiren() {
+  if (!audioCtx) return;
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.2);
+    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.4);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.6);
+  } catch (e) {
+    console.warn('Audio siren notice:', e);
+  }
+}
+

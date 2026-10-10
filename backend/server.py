@@ -82,6 +82,47 @@ def init_db():
         );
     """)
 
+    # Nutrition & Hydration Logs table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nutrition_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_date TEXT NOT NULL,
+            meal_type TEXT NOT NULL,
+            food_name TEXT NOT NULL,
+            calories REAL DEFAULT 0,
+            protein REAL DEFAULT 0,
+            hydration_ml REAL DEFAULT 0,
+            notes TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    # Emergency Contacts table (Parents, Hostel Warden, Helplines)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS emergency_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL,
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            notes TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    # Emergency Events Log
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS emergency_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            latitude REAL,
+            longitude REAL,
+            address TEXT,
+            message TEXT,
+            recipient TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
     # Seed initial sample medications if table is empty
     cursor.execute("SELECT COUNT(*) FROM medications")
     if cursor.fetchone()[0] == 0:
@@ -95,6 +136,39 @@ def init_db():
                 INSERT INTO medications (name, dosage, time_of_day, meal_timing, frequency, notes)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (name, dosage, time_of_day, meal_timing, frequency, notes))
+
+    # Seed initial emergency contacts if empty
+    cursor.execute("SELECT COUNT(*) FROM emergency_contacts")
+    if cursor.fetchone()[0] == 0:
+        default_contacts = [
+            ("Parents", "Parents / Family", "+919876543210", "Primary family contact for medical emergencies"),
+            ("Hostel Warden", "Hostel Warden Office", "+919123456789", "Campus / hostel residential supervisor"),
+            ("Ambulance", "National Ambulance Helpline", "108", "Free emergency medical ambulance"),
+            ("Police", "Police Emergency", "100", "Police control room"),
+            ("Highway Help", "NHAI Road Accident Helpline", "1033", "24x7 Highway emergency & breakdown help"),
+            ("Universal SOS", "National Emergency Responder", "112", "All-in-one emergency helpline")
+        ]
+        for role, name, phone, notes in default_contacts:
+            cursor.execute("""
+                INSERT INTO emergency_contacts (role, name, phone, notes)
+                VALUES (?, ?, ?, ?)
+            """, (role, name, phone, notes))
+
+    # Seed a couple of initial food/hydration items for today if empty
+    cursor.execute("SELECT COUNT(*) FROM nutrition_logs")
+    if cursor.fetchone()[0] == 0:
+        today_str = datetime.date.today().isoformat()
+        sample_logs = [
+            (today_str, "Breakfast", "Oatmeal with Almonds & Milk", 320, 12, 150, "Nutritious fiber start"),
+            (today_str, "Water", "Morning Hydration (Glass 1 & 2)", 0, 0, 500, "2 glasses of warm water"),
+            (today_str, "Lunch", "Steamed Brown Rice, Lentil Dal & Salad", 450, 16, 250, "Balanced lunch meal"),
+            (today_str, "Water", "Afternoon Hydration (Glass 3 & 4)", 0, 0, 500, "Post-lunch water")
+        ]
+        for log_date, meal_type, food_name, calories, protein, hydration_ml, notes in sample_logs:
+            cursor.execute("""
+                INSERT INTO nutrition_logs (log_date, meal_type, food_name, calories, protein, hydration_ml, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (log_date, meal_type, food_name, calories, protein, hydration_ml, notes))
 
     conn.commit()
     conn.close()
@@ -1060,6 +1134,8 @@ def get_reports():
     limit = request.args.get("limit", 20, type=int)
     category = request.args.get("category", "").strip()
     search = request.args.get("search", "").strip()
+    sort = request.args.get("sort", "name_asc").strip()
+    letter = request.args.get("letter", "").strip()
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1076,15 +1152,29 @@ def get_reports():
         search_param = f"%{search}%"
         params.extend([search_param, search_param, search_param])
 
+    if letter and len(letter) == 1 and letter.isalpha():
+        query_parts.append("original_name LIKE ?")
+        params.append(f"{letter}%")
+
     where_clause = " AND ".join(query_parts)
+
+    # Sequence order sorting (Default: A-Z Alphabetical by Patient Name)
+    if sort == "name_desc":
+        order_by = "ORDER BY original_name COLLATE NOCASE DESC"
+    elif sort == "id_desc":
+        order_by = "ORDER BY id DESC"
+    elif sort == "id_asc":
+        order_by = "ORDER BY id ASC"
+    else:  # name_asc (A to Z Alphabetical)
+        order_by = "ORDER BY original_name COLLATE NOCASE ASC"
 
     # Count total matching rows
     cursor.execute(f"SELECT COUNT(*) FROM reports WHERE {where_clause}", params)
     total_count = cursor.fetchone()[0]
 
-    # Paginate
+    # Paginate with sequence order
     offset = (page - 1) * limit
-    cursor.execute(f"SELECT * FROM reports WHERE {where_clause} ORDER BY id DESC LIMIT ? OFFSET ?", params + [limit, offset])
+    cursor.execute(f"SELECT * FROM reports WHERE {where_clause} {order_by} LIMIT ? OFFSET ?", params + [limit, offset])
     rows = cursor.fetchall()
     conn.close()
 
@@ -1389,6 +1479,201 @@ def identify_medicine():
         "photoStored": saved_filename,
         "data": matched_med
     })
+
+# -------------------------------------------------------------
+# REST API: Daily Nutrition, Protein & Hydration Tracker
+# -------------------------------------------------------------
+@app.route("/api/nutrition/today", methods=["GET"])
+def get_daily_nutrition():
+    today_str = datetime.date.today().isoformat()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM nutrition_logs WHERE log_date = ? ORDER BY id DESC
+    """, (today_str,))
+    rows = cursor.fetchall()
+
+    total_calories = sum(r["calories"] or 0 for r in rows)
+    total_protein = sum(r["protein"] or 0 for r in rows)
+    total_hydration = sum(r["hydration_ml"] or 0 for r in rows)
+
+    conn.close()
+
+    logs = [{
+        "id": r["id"],
+        "date": r["log_date"],
+        "mealType": r["meal_type"],
+        "foodName": r["food_name"],
+        "calories": r["calories"],
+        "protein": r["protein"],
+        "hydrationMl": r["hydration_ml"],
+        "notes": r["notes"],
+        "createdAt": r["created_at"]
+    } for r in rows]
+
+    return jsonify({
+        "success": True,
+        "date": today_str,
+        "team": TEAM_NAME,
+        "totals": {
+            "calories": round(total_calories, 1),
+            "protein": round(total_protein, 1),
+            "hydrationMl": round(total_hydration, 1),
+            "waterGlasses": round(total_hydration / 250, 1)
+        },
+        "logs": logs
+    })
+
+@app.route("/api/nutrition/log", methods=["POST"])
+def add_nutrition_log():
+    body = request.get_json(force=True, silent=True) or request.form
+    meal_type = body.get("mealType", "Snack")
+    food_name = body.get("foodName", "Meal Item")
+    calories = float(body.get("calories", 0) or 0)
+    protein = float(body.get("protein", 0) or 0)
+    hydration_ml = float(body.get("hydrationMl", 0) or 0)
+    notes = body.get("notes", "")
+    today_str = datetime.date.today().isoformat()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO nutrition_logs (log_date, meal_type, food_name, calories, protein, hydration_ml, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (today_str, meal_type, food_name, calories, protein, hydration_ml, notes))
+    new_id = cursor.lastrowid
+    conn.commit()
+
+    cursor.execute("SELECT * FROM nutrition_logs WHERE id = ?", (new_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "message": f"Logged {food_name} successfully",
+        "data": {
+            "id": row["id"],
+            "date": row["log_date"],
+            "mealType": row["meal_type"],
+            "foodName": row["food_name"],
+            "calories": row["calories"],
+            "protein": row["protein"],
+            "hydrationMl": row["hydration_ml"],
+            "notes": row["notes"]
+        }
+    }), 201
+
+@app.route("/api/nutrition/log/<int:log_id>", methods=["DELETE"])
+def delete_nutrition_log(log_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM nutrition_logs WHERE id = ?", (log_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({
+        "success": True,
+        "message": "Meal log removed",
+        "logId": log_id
+    })
+
+# -------------------------------------------------------------
+# REST API: Emergency Contacts & Highway Accident SOS
+# -------------------------------------------------------------
+@app.route("/api/emergency/contacts", methods=["GET"])
+def get_emergency_contacts():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM emergency_contacts ORDER BY id ASC")
+    rows = cursor.fetchall()
+    conn.close()
+    contacts = [{
+        "id": r["id"],
+        "role": r["role"],
+        "name": r["name"],
+        "phone": r["phone"],
+        "notes": r["notes"]
+    } for r in rows]
+    return jsonify({
+        "success": True,
+        "team": TEAM_NAME,
+        "contacts": contacts
+    })
+
+@app.route("/api/emergency/contacts", methods=["POST"])
+def update_emergency_contact():
+    body = request.get_json(force=True, silent=True) or request.form
+    contact_id = body.get("id")
+    role = body.get("role", "Emergency Contact")
+    name = body.get("name", "Contact Name")
+    phone = body.get("phone", "")
+    notes = body.get("notes", "")
+
+    if not phone:
+        return jsonify({"success": False, "error": "Phone number required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if contact_id:
+        cursor.execute("""
+            UPDATE emergency_contacts SET role = ?, name = ?, phone = ?, notes = ? WHERE id = ?
+        """, (role, name, phone, notes, contact_id))
+    else:
+        cursor.execute("""
+            INSERT INTO emergency_contacts (role, name, phone, notes) VALUES (?, ?, ?, ?)
+        """, (role, name, phone, notes))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "message": f"Emergency contact '{name}' saved successfully"
+    })
+
+@app.route("/api/emergency/sos", methods=["POST"])
+def trigger_emergency_sos():
+    body = request.get_json(force=True, silent=True) or request.form
+    event_type = body.get("eventType", "Highway Emergency / Accident")
+    lat = body.get("latitude")
+    lon = body.get("longitude")
+    address = body.get("address", "Live GPS Coordinates")
+    message = body.get("message", "Immediate assistance requested")
+    recipient = body.get("recipient", "Parents & Hostel Warden")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO emergency_events (event_type, latitude, longitude, address, message, recipient)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (event_type, lat, lon, address, message, recipient))
+    new_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    # Formatted emergency dispatch payload
+    google_maps_url = f"https://www.google.com/maps?q={lat},{lon}" if lat and lon else "https://maps.google.com"
+    hospitals_near_me = f"https://www.google.com/maps/search/hospitals+near+me/@{lat},{lon},14z" if lat and lon else "https://www.google.com/maps/search/hospitals+near+me"
+    police_near_me = f"https://www.google.com/maps/search/police+station+near+me/@{lat},{lon},14z" if lat and lon else "https://www.google.com/maps/search/police+station+near+me"
+
+    return jsonify({
+        "success": True,
+        "message": "Emergency SOS alert registered and broadcast ready!",
+        "eventId": new_id,
+        "team": TEAM_NAME,
+        "dispatch": {
+            "eventType": event_type,
+            "coordinates": {"lat": lat, "lon": lon},
+            "googleMapsUrl": google_maps_url,
+            "nearestHospitalsUrl": hospitals_near_me,
+            "nearestPoliceUrl": police_near_me,
+            "helplines": {
+                "universalEmergency": "112",
+                "ambulance": "108",
+                "police": "100",
+                "highwayHelpline": "1033",
+                "womenHelpline": "1091"
+            }
+        }
+    }), 201
 
 # -------------------------------------------------------------
 # Static Frontend Serving
