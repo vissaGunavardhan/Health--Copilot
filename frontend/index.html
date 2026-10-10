@@ -114,6 +114,52 @@
   <!-- Main Container -->
   <main class="container-fluid px-4 py-4">
 
+    <!-- Animated Welcome Hero Banner: Represented by Brocode Team -->
+    <div class="brocode-welcome-hero mb-4 position-relative overflow-hidden shadow-sm" id="brocodeWelcomeBanner">
+      <div class="welcome-bg-glow"></div>
+      <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between p-4 position-relative z-1 gap-3">
+        <div class="d-flex align-items-center gap-3">
+          <div class="welcome-pulse-ring">
+            <div class="welcome-heart-icon">
+              <i class="bi bi-heart-pulse-fill"></i>
+            </div>
+          </div>
+          <div>
+            <div class="d-inline-flex align-items-center welcome-team-badge mb-1">
+              <i class="bi bi-award-fill text-warning me-1"></i>
+              <span class="fw-bold tracking-wide">REPRESENTED BY THE BROCODE TEAM</span>
+              <span class="badge-dot ms-2"></span>
+            </div>
+            <h2 class="welcome-hero-title mb-1 fw-extrabold text-uppercase">
+              Welcome to <span class="text-gradient-brocode">Personal AI Health Copilot</span>
+            </h2>
+            <p class="welcome-hero-subtitle text-muted mb-0 small">
+              Smart Clinical Intelligence &bull; 5,000 Patient Cohort &bull; Live Medicine Adherence &bull; 24x7 Highway Emergency SOS &bull; Voice AI
+            </p>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <button type="button" class="btn btn-sm btn-outline-teal bg-white rounded-pill shadow-sm" id="welcomeVoiceGreetingBtn" onclick="playWelcomeAudioGreeting()">
+            <i class="bi bi-volume-up-fill text-teal me-1"></i> 🔊 Listen Intro
+          </button>
+          <button type="button" class="btn btn-sm btn-danger fw-bold rounded-pill sos-pulse shadow-sm" onclick="openEmergencyModal()">
+            <i class="bi bi-shield-fill-plus me-1"></i> 24x7 SOS Help
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill border-0" onclick="dismissWelcomeBanner()" title="Hide banner">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+      <div class="welcome-highlights-bar d-flex flex-wrap gap-2 px-4 py-2 border-top bg-white bg-opacity-75">
+        <span class="welcome-feature-chip" onclick="document.getElementById('tab-cohort-btn').click()"><i class="bi bi-people-fill text-primary"></i> 5,000 Patient Cohort (A-Z)</span>
+        <span class="welcome-feature-chip" onclick="document.getElementById('tab-meds-btn').click()"><i class="bi bi-alarm-fill text-teal"></i> Live Medicine Clock</span>
+        <span class="welcome-feature-chip" onclick="document.getElementById('tab-nutrition-btn').click()"><i class="bi bi-calculator-fill text-success"></i> Age-wise BMI & Nutrition</span>
+        <span class="welcome-feature-chip" onclick="document.getElementById('tab-consultant-btn').click()"><i class="bi bi-clipboard2-pulse-fill text-info"></i> Doctor Checklist</span>
+        <span class="welcome-feature-chip" onclick="document.getElementById('tab-highway-btn').click()"><i class="bi bi-exclamation-octagon-fill text-danger"></i> Highway SOS & GPS</span>
+        <span class="welcome-feature-chip" onclick="document.getElementById('tab-voice-btn').click()"><i class="bi bi-mic-fill" style="color: #9333ea;"></i> Voice Accessibility</span>
+      </div>
+    </div>
+
     <!-- Medical Safety Disclaimer -->
     <div class="disclaimer-banner mb-4 d-flex align-items-center justify-content-between" role="alert">
       <div class="d-flex align-items-center">

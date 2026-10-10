@@ -1844,3 +1844,38 @@ function playEmergencySiren() {
   }
 }
 
+// =========================================================================
+// 12. WELCOME ANIMATION HERO & AUDIO INTRO (REPRESENTED BY THE BROCODE TEAM)
+// =========================================================================
+window.playWelcomeAudioGreeting = function() {
+  const greeting = "Welcome to Personal AI Health Copilot, proudly represented by The Brocode Team. Your clinical assistant for comprehensive health intelligence, five thousand patient cohort analytics, daily nutrition tracking, and twenty-four seven highway emergency SOS.";
+  const btn = document.getElementById('welcomeVoiceGreetingBtn');
+  if (btn) {
+    btn.innerHTML = '<span class="spinner-grow spinner-grow-sm text-teal me-1"></span> Speaking Intro...';
+    btn.disabled = true;
+  }
+  speakText(greeting, () => {
+    if (btn) {
+      btn.innerHTML = '<i class="bi bi-volume-up-fill text-teal me-1"></i> 🔊 Listen Intro';
+      btn.disabled = false;
+    }
+  });
+};
+
+window.dismissWelcomeBanner = function() {
+  const banner = document.getElementById('brocodeWelcomeBanner');
+  if (banner) {
+    banner.style.transition = 'opacity 0.4s ease, transform 0.4s ease, max-height 0.4s ease, margin 0.4s ease, padding 0.4s ease';
+    banner.style.opacity = '0';
+    banner.style.transform = 'translateY(-12px)';
+    banner.style.maxHeight = '0';
+    banner.style.overflow = 'hidden';
+    banner.style.margin = '0';
+    banner.style.padding = '0';
+    setTimeout(() => {
+      banner.remove();
+    }, 400);
+  }
+};
+
+
