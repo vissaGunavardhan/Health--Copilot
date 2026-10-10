@@ -1,20 +1,20 @@
 # Health Copilot — AI-Powered Personal Health Records Assistant
 
-> **Hackathon Prototype** | An assistive tool designed to organize personal medical records and translate complex laboratory reports into clear, patient-friendly insights.
+> **Represented by The Brocode** | An assistive healthcare intelligence platform designed to organize medical records, analyze population-scale patient cohorts, and translate complex laboratory reports into clear, patient-friendly insights.
 
 ---
 
-## 1. Project Overview
+## 1. Project Overview & Features
 
-Medical laboratory test reports and clinical summaries are often laden with dense jargon, abbreviated units, and obscure reference ranges that leave patients feeling confused and anxious.
+**Health Copilot**, proudly represented by **The Brocode**, empowers patients and healthcare providers by:
+1. **5,000+ Patient Cohort Analytics**: Synthesizes and analyzes a population health dataset of 5,000+ patient records, tracking 30,000+ biomarkers with dynamic real-time updates as new data is uploaded.
+2. **Accessible Medical Dashboard**: Clean, intuitive interface supporting digital PDF parsing, camera image OCR, and 1-click clinical sample presets.
+3. **Clinical AI Rules & Summarization Engine**: Explains out-of-range metrics in simple language, generates tailored questions for physician consultation, and provides spoken audio read-aloud for illiterate or elderly patients.
+4. **Live Medicine Tracker & Chime Reminders**: Real-time digital clock, next-dose countdown ticker, and audio reminders.
+5. **Medicine Photo & Packaging Identifier**: Identifies tablets and medicine strips from photos and provides verified clinical uses, dosages, and safety precautions.
+6. **Voice Copilot (Microphone Accessibility)**: Full speech-to-text input and spoken audio guidance for users who cannot read or write easily.
+7. **Privacy-Preserving SQLite Storage**: Stores all records locally in SQLite (`backend/db/health_copilot.db`).
 
-**Health Copilot** empowers patients to take control of their health data by:
-1. Providing a clean, intuitive drag-and-drop dashboard for uploading medical lab reports (PDFs and images).
-2. Extracting raw document text using PDF parsing and OCR (Optical Character Recognition).
-3. Utilizing AI models to summarize laboratory findings, explain out-of-range metrics in accessible terms, and produce clarifying questions for consultations with physicians.
-4. Persisting records locally in a lightweight SQLite database to maintain privacy.
-
----
 
 ## 2. Technology Stack
 
@@ -94,10 +94,19 @@ Install backend dependencies:
 npm install
 ```
 
-Start the Express development server:
+Start the backend server:
+
+**Option A (Python — Instant, Zero Setup):**
 ```bash
-npm run dev
-# Or standard start:
+cd backend
+py server.py
+# Or: python server.py
+```
+
+**Option B (Node.js Express):**
+```bash
+cd backend
+npm install
 npm start
 ```
 
@@ -105,24 +114,13 @@ Verify backend health in your browser or terminal:
 ```bash
 curl http://localhost:5000/api/health
 ```
-Expected response:
-```json
-{
-  "status": "ok",
-  "service": "Health Copilot API",
-  "version": "1.0.0"
-}
-```
 
-### Step 2: Frontend Setup
-You can view the frontend simply by opening the HTML file:
-- Open `frontend/index.html` directly in your web browser, OR
-- Serve it via VS Code's Live Server extension or Python simple server:
-  ```bash
-  # Optional: from project root
-  npx serve frontend
-  ```
-- Once the backend is running on port 5000, click the **"Check API"** button in the dashboard navigation bar to confirm live connectivity.
+### Step 2: Open Dashboard
+- Open `http://localhost:5000/` in your browser (automatically served by the backend server!), OR
+- Open `frontend/index.html` directly in your browser.
+- Click **"Try Demo Report"** to immediately test the end-to-end extraction and AI summarization pipeline.
+- Or drag and drop any medical lab report (PDF, PNG, JPG, or TXT).
+
 
 ---
 
