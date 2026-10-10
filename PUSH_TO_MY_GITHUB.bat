@@ -14,8 +14,8 @@ echo Press any key when ready to push...
 pause >nul
 
 echo.
-echo [*] Updating git remote to: https://github.com/vissaGunavardhan/Health---Copilot.git
-git remote set-url origin https://github.com/vissaGunavardhan/Health---Copilot.git
+echo [*] Updating git remote to: https://github.com/vissaGunavardhan/Health--Copilot.git
+git remote set-url origin https://github.com/vissaGunavardhan/Health--Copilot.git
 
 echo [*] Pushing latest code to your GitHub account...
 git push -u origin main
@@ -24,7 +24,7 @@ echo.
 if %ERRORLEVEL% EQU 0 (
     echo ========================================================
     echo   [SUCCESS] Your project is live at:
-    echo   https://github.com/vissaGunavardhan/Health---Copilot
+    echo   https://github.com/vissaGunavardhan/Health--Copilot
     echo ========================================================
 ) else (
     echo [!] Push failed or authentication required.
